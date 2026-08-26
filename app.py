@@ -18,6 +18,8 @@ st.markdown("""
     .stApp { background: #010114; color: #e0e0e0; }
     .chat-bubble { padding: 15px; border-radius: 15px; margin: 10px 0; background: #0a0a2e; border: 1px solid #00d2ff; }
     .stButton>button { background: linear-gradient(90deg, #00d2ff, #3a7bd5); color: white; border-radius: 15px; border:none; }
+    /* Sécurité supplémentaire : cache tout bloc identifié comme 'thinking' au cas où */
+    [data-testid="stMarkdownContainer"] :contains("<think>") { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -27,23 +29,26 @@ if "turbo" not in st.session_state: st.session_state.turbo = False
 if "auth" not in st.session_state: st.session_state.auth = False
 if "code_prive" not in st.session_state: st.session_state.code_prive = "kele224"
 
-# --- LOGIQUE DE NETTOYAGE RADICAL ---
-def clean_kele_output(text):
-    # Supprime tout ce qui est entre les balises <think> ou les blocs de raisonnement
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    text = re.sub(r'Thinking Process:.*?\n', '', text, flags=re.IGNORECASE)
-    # Supprime les introductions de raisonnement en anglais
-    if "Here's a thinking process" in text:
-        text = text.split("Final Output:")[-1] if "Final Output:" in text else text.split("\n\n")[-1]
-    return text.strip()
+# --- LE BROUILLON INVISIBLE & NETTOYAGE ---
+def process_and_clean(raw_text):
+    # ÉTAPE 1 : Capture du brouillon invisible (logique interne)
+    brouillon_interne = re.findall(r'<think>(.*?)</think>', raw_text, flags=re.DOTALL)
+    
+    # ÉTAPE 2 : Suppression RADICALE de toute pensée pour l'écran
+    clean_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
+    clean_text = re.sub(r'\(Thinking:.*?\)', '', clean_text, flags=re.IGNORECASE)
+    
+    return clean_text.strip()
 
 def get_kele_response(user_input):
     model_to_use = "openai/gpt-oss-120b" if st.session_state.turbo else "qwen/qwen3.6-27b"
     
+    # System Prompt : Ordre de ne jamais parler anglais et d'être direct
     system_instr = f"""
     NOM: KELE. Tu es le Maître Absolu.
-    INTERDICTION STRICTE: Ne parle JAMAIS anglais. Ne montre JAMAIS de pensée.
-    RÈGLE: Réponds UNIQUEMENT en Français, de manière directe et chirurgicale.
+    RÈGLE DE FER: RÉPONDS UNIQUEMENT EN FRANÇAIS. 
+    FORMAT: DONNE LA RÉPONSE DIRECTE. PAS DE PENSÉE, PAS DE 'HERE IS MY THINKING'.
+    PUISSANCE: {"TURBO" if st.session_state.turbo else "STANDARD"}.
     """
     
     try:
@@ -52,8 +57,7 @@ def get_kele_response(user_input):
             messages=[{"role": "system", "content": system_instr}] + st.session_state.messages,
             temperature=0.1,
         )
-        raw_res = chat_completion.choices[0].message.content
-        return clean_kele_output(raw_res) # Nettoyage avant affichage
+        return process_and_clean(chat_completion.choices[0].message.content)
     except Exception as e:
         return f"Erreur Kele : {str(e)}"
 
@@ -99,15 +103,17 @@ for m in st.session_state.messages:
 # Entrée
 prompt = st.chat_input("Écrivez au Maître Kele...")
 if prompt:
+    # Détection immédiate du code Turbo
     if prompt.strip().lower() == st.session_state.code_prive:
         st.session_state.turbo = True
-        st.session_state.messages.append({"role": "assistant", "content": "🚀 MODE TURBO ACTIVÉ."})
+        st.session_state.messages.append({"role": "assistant", "content": "🚀 PROTOCOLE KELE-224 : PUISSANCE MAXIMALE DÉPLOYÉE."})
         st.rerun()
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"): st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        # La réponse est traitée et nettoyée avant d'arriver ici
         res = get_kele_response(prompt)
         st.markdown(f"<div class='chat-bubble'>{res}</div>", unsafe_allow_html=True)
         st.session_state.messages.append({"role": "assistant", "content": res})
