@@ -6,13 +6,18 @@ from groq import Groq
 from gtts import gTTS
 
 # ------------------------------------------------------------------------------
-# 1. CONFIGURATION DE LA CLÉ API
+# 1. INITIALISATION DU CLIENT GROQ (Via Streamlit Secrets)
 # ------------------------------------------------------------------------------
-DEFAULT_GROQ_KEY = "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"
-groq_api_key = os.environ.get("GROQ_API_KEY", DEFAULT_GROQ_KEY)
+api_key = os.environ.get("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", "")
+
+if not api_key:
+    st.error("🔑 Clé API introuvable ! Veuillez ajouter GROQ_API_KEY dans les Secrets de Streamlit.")
+    st.stop()
+
+client = Groq(api_key=api_key)
 
 # ------------------------------------------------------------------------------
-# 2. CONFIGURATION DE L'INTERFACE & STYLE CSS (Dégradé Mobile)
+# 2. CONFIGURATION DE L'INTERFACE & STYLE CSS
 # ------------------------------------------------------------------------------
 st.set_page_config(
     page_title="KELE OS - Intelligence Universelle",
@@ -56,11 +61,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# 3. LISTE DES MODÈLES AUTORISÉS
+# 3. LISTE DES MODÈLES OFFICIELS GROQ
 # ------------------------------------------------------------------------------
 MODELS_STACK = {
-    "orchestrator": "openai/gpt-oss-120b",
-    "fast_chat": "openai/gpt-oss-20b",
+    "orchestrator": "llama-3.3-70b-versatile",
+    "fast_chat": "llama-3.1-8b-instant",
     "whisper": "whisper-large-v3-turbo"
 }
 
@@ -81,8 +86,6 @@ if "user_authenticated" not in st.session_state:
 
 if "user_email" not in st.session_state:
     st.session_state.user_email = ""
-
-client = Groq(api_key=groq_api_key)
 
 # ------------------------------------------------------------------------------
 # 5. SYSTEM PROMPT (KELE-OS)
@@ -207,18 +210,18 @@ def process_query(prompt_text):
     except Exception as e:
         return f"Erreur de communication : {str(e)}"
 
-# Affichage des messages
+# Affichage de l'historique des conversations
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Saisie vocale via le composant natif Streamlit
+# Entrée vocale
 audio_val = st.audio_input("🎤 Enregistrer un message vocal")
 
-# Zone de saisie texte
-user_input = st.chat_input("Posez une question ou entrez le code d'activation...")
+# Entrée texte
+user_input = st.chat_input("Posez une question ou entrez le code...")
 
-# Traitement de l'audio si présent
+# Traitement vocal si un enregistrement est soumis
 if audio_val:
     try:
         transcription = client.audio.transcriptions.create(
@@ -229,6 +232,7 @@ if audio_val:
     except Exception as e:
         st.error(f"Erreur de transcription audio : {e}")
 
+# Exécution de la réponse
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
