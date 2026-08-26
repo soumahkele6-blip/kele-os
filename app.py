@@ -6,110 +6,105 @@ from groq import Groq
 from gtts import gTTS
 from streamlit_mic_recorder import mic_recorder
 
-# ==================== CONFIGURATION SUPRÊME ====================
+# ==================== MOTEUR SUPRÊME KELE ====================
 API_KEY = "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"
-# Modèle 120B : Puissance maximale
-MODEL_UNIQUE = "openai/gpt-oss-120b" 
+MODEL_ID = "openai/gpt-oss-120b"
 client = Groq(api_key=API_KEY)
 
 st.set_page_config(page_title="KELE-OS", page_icon="🧠", layout="wide")
 
-# STYLE CSS (CONSERVÉ)
+# STYLE CSS IMMERSIF
 st.markdown("""
 <style>
-    .stApp { background: radial-gradient(circle at top, #05051a 0%, #010105 100%); color: #e0e0e0; }
+    .stApp { background: #020205; color: #ffffff; }
     .chat-bubble {
-        padding: 20px; border-radius: 15px; margin: 15px 0;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(0, 210, 255, 0.3);
+        padding: 20px; border-radius: 15px; margin: 10px 0;
+        background: #0a0a1a; border: 1px solid #00d2ff;
+        box-shadow: 0 0 15px rgba(0, 210, 255, 0.1);
+        font-size: 1.1rem;
     }
-    .title-kele {
-        font-size: 3rem; font-weight: 900; text-align: center;
+    .title {
+        font-size: 3.5rem; font-weight: 900; text-align: center;
         background: linear-gradient(90deg, #00d2ff, #3a7bd5);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        letter-spacing: 5px;
     }
-    .stButton>button { background: linear-gradient(45deg, #00d2ff, #3a7bd5); color: white; border-radius: 10px; }
+    .stButton>button { background: #00d2ff; color: #000; font-weight: bold; width: 100%; border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
+# GESTION ÉTATS
 if "messages" not in st.session_state: st.session_state.messages = []
 if "auth" not in st.session_state: st.session_state.auth = False
 
-def clean_kele_output(text):
-    """Extrait la réponse finale ou le raisonnement si nécessaire"""
-    if not text: return ""
-    
-    # On cherche le contenu des balises <think>
-    think_match = re.findall(r'<think>(.*?)</think>', text, flags=re.DOTALL)
-    # On enlève les balises pour voir ce qu'il reste
-    final_output = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
-    
-    # Si le texte hors balise est vide, on prend le dernier raisonnement (souvent la réponse)
-    if not final_output and think_match:
-        final_output = think_match[-1].strip()
-    
-    # Nettoyage final des résidus de balises
-    final_output = re.sub(r'<.*?>', '', final_output)
-    return final_output
+def clean_output(text):
+    """Extraction chirurgicale de la réponse (invisiblement)"""
+    if not text: return "Erreur : Le cerveau est vide."
+    # On récupère tout ce qui est HORS des balises <think>
+    final = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    # Si le modèle a tout mis dans <think>, on récupère le contenu de <think>
+    if not final:
+        think_content = re.findall(r'<think>(.*?)</think>', text, flags=re.DOTALL)
+        final = think_content[-1] if think_content else text
+    return re.sub(r'<.*?>', '', final).strip()
 
-def get_kele_response(user_input):
-    system_prompt = "Tu es KELE. Réponds directement et uniquement en Français. Ne montre pas de balises."
+def get_response(prompt):
+    """Communication directe avec le 120B"""
+    sys_prompt = "Tu es KELE. Maître absolu. Réponds en Français. Pas de blabla, juste la solution."
     try:
         completion = client.chat.completions.create(
-            model=MODEL_UNIQUE,
-            messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages,
-            temperature=0.5,
-            max_tokens=2048 # Augmenté pour les énigmes longues
+            model=MODEL_ID,
+            messages=[{"role": "system", "content": sys_prompt}] + st.session_state.messages,
+            temperature=0.4,
+            max_tokens=3000
         )
-        raw_text = completion.choices[0].message.content
-        return clean_kele_output(raw_text)
+        return clean_output(completion.choices[0].message.content)
     except Exception as e:
-        return f"Erreur Système : {str(e)}"
+        return f"Échec Système : {str(e)}"
 
-def speak_response(text):
+def speak(text):
+    """Voix de Kele"""
     try:
-        tts = gTTS(text=text[:400], lang='fr')
-        tts.save("r.mp3")
-        with open("r.mp3", "rb") as f:
+        tts = gTTS(text=text[:300], lang='fr')
+        tts.save("s.mp3")
+        with open("s.mp3", "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
-            st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{b64}">', unsafe_allow_html=True)
+            st.markdown(f'<audio autoplay src="data:audio/mp3;base64,{b64}">', unsafe_allow_html=True)
     except: pass
 
-# --- INTERFACE ---
-st.markdown("<h1 class='title-kele'>KELE-OS</h1>", unsafe_allow_html=True)
+# INTERFACE
+st.markdown("<h1 class='title'>KELE-OS</h1>", unsafe_allow_html=True)
 
-c1, c2, c3 = st.columns(3)
-with c2: audio_data = mic_recorder(start_prompt="🎙️ PARLER", stop_prompt="⏹️ STOP", key='kele_mic')
-with c3:
+# Barre d'outils mobile
+col_mic, col_auth = st.columns(2)
+with col_mic:
+    audio = mic_recorder(start_prompt="🎙️ PARLER", stop_prompt="⏹️ STOP", key='mic')
+with col_auth:
     if not st.session_state.auth:
-        if st.button("🔑 CONNEXION"): st.session_state.login = True
-    else: st.success("MAÎTRE CONNECTÉ")
+        if st.button("🔑 LOGIN"): st.session_state.show_login = True
+    else: st.success("MAÎTRE ✅")
 
-if st.session_state.get('login', False) and not st.session_state.auth:
-    code = st.text_input("Code Secret", type="password")
-    if st.button("OK"):
-        if code == "kele224":
+if st.session_state.get('show_login') and not st.session_state.auth:
+    pwd = st.text_input("Code", type="password")
+    if st.button("DÉVERROUILLER"):
+        if pwd == "kele224":
             st.session_state.auth = True
             st.rerun()
 
-# Zone de Chat
-for msg in st.session_state.messages:
-    icon = "🧠" if msg["role"] == "assistant" else "👤"
-    st.markdown(f"<div class='chat-bubble'><b>{icon} {msg['role'].upper()} :</b><br>{msg['content']}</div>", unsafe_allow_html=True)
+# Affichage des messages
+for m in st.session_state.messages:
+    icon = "🧠" if m["role"] == "assistant" else "👤"
+    st.markdown(f"<div class='chat-bubble'><b>{icon} {m['role'].upper()}</b><br>{m['content']}</div>", unsafe_allow_html=True)
 
-# Saisie
-prompt = st.chat_input("Dictez votre volonté...")
-if audio_data: prompt = "Analyse ma demande vocale."
+# Entrée Utilisateur
+user_query = st.chat_input("Dictez votre volonté...")
+if audio: user_query = "Réponds à mon message vocal."
 
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if user_query:
+    # Sauvegarde et génération
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    
+    with st.spinner("Analyse KELE..."):
+        answer = get_response(user_query)
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+        if st.session_state.auth: speak(answer)
     st.rerun()
-
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    with st.spinner("KELE calcule..."):
-        res = get_kele_response(st.session_state.messages[-1]["content"])
-        if not res: res = "Le modèle n'a pas renvoyé de texte. Essayez de raccourcir la question."
-        st.session_state.messages.append({"role": "assistant", "content": res})
-        if st.session_state.auth: speak_response(res)
-        st.rerun()
