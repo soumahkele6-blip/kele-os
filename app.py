@@ -6,12 +6,9 @@ from groq import Groq
 from gtts import gTTS
 
 # ------------------------------------------------------------------------------
-# 1. CONFIGURATION DE LA CLÉ API (TESTS & PRODUCTION)
+# 1. CONFIGURATION DE LA CLÉ API
 # ------------------------------------------------------------------------------
-# Clé par défaut pour vos tests rapides
 DEFAULT_GROQ_KEY = "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"
-
-# Récupère la clé des Secrets Streamlit prioritaires, ou utilise la clé de test
 groq_api_key = os.environ.get("GROQ_API_KEY", DEFAULT_GROQ_KEY)
 
 # ------------------------------------------------------------------------------
@@ -59,20 +56,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# 3. LISTE RESTREINTE DES MODÈLES AUTORISÉS
+# 3. LISTE DES MODÈLES AUTORISÉS
 # ------------------------------------------------------------------------------
 MODELS_STACK = {
     "orchestrator": "openai/gpt-oss-120b",
     "fast_chat": "openai/gpt-oss-20b",
-    "guard_prompt": "meta-llama/llama-prompt-guard-2-86m",
-    "guard_safety": "openai/gpt-oss-safeguard-20b",
-    "whisper": "whisper-large-v3-turbo",
-    "arabic_specialist": "canopylabs/orpheus-arabic-saudi",
-    "english_specialist": "canopylabs/orpheus-v1-english",
-    "allam_arabic": "allam-2-7b",
-    "qwen_reasoning": "qwen/qwen3.6-27b",
-    "compound": "groq/compound",
-    "compound_mini": "groq/compound-mini"
+    "whisper": "whisper-large-v3-turbo"
 }
 
 # ------------------------------------------------------------------------------
@@ -223,8 +212,22 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Zone de saisie
+# Saisie vocale via le composant natif Streamlit
+audio_val = st.audio_input("🎤 Enregistrer un message vocal")
+
+# Zone de saisie texte
 user_input = st.chat_input("Posez une question ou entrez le code d'activation...")
+
+# Traitement de l'audio si présent
+if audio_val:
+    try:
+        transcription = client.audio.transcriptions.create(
+            file=("audio.wav", audio_val.read()),
+            model=MODELS_STACK["whisper"]
+        )
+        user_input = transcription.text
+    except Exception as e:
+        st.error(f"Erreur de transcription audio : {e}")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
@@ -232,7 +235,7 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Traitement en cours..."):
+        with st.spinner("KELE traite la requête..."):
             response_text = process_query(user_input)
             st.markdown(response_text)
 
