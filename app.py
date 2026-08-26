@@ -1,218 +1,183 @@
 import streamlit as st
 import json
-import os
 import base64
 import re
-from datetime import datetime
 from groq import Groq
 from gtts import gTTS
 from streamlit_mic_recorder import mic_recorder
-import pandas as pd
 
-# ==================== CONFIGURATION & API ====================
-GROQ_API_KEY = "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"
-client = Groq(api_key=GROQ_API_KEY)
+# ==================== CONFIGURATION SUPRÊME ====================
+# Identité et Accès
+API_KEY = "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"
+MODEL_UNIQUE = "openai/gpt-oss-120b" # Le cerveau unique et surpuissant
+client = Groq(api_key=API_KEY)
 
-st.set_page_config(
-    page_title="KELE - Intelligence Suprême",
-    page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="KELE - L'Entité", page_icon="🧠", layout="wide")
 
-# ==================== DESIGN CSS (VIOLET DÉGRADÉ) ====================
+# ==================== ESTHÉTIQUE KELE (PÉNUMBRE & CYAN) ====================
 st.markdown("""
 <style>
+    /* Fond dégradé cosmique */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-        color: #ffffff;
+        background: radial-gradient(circle at top, #05051a 0%, #010105 100%);
+        color: #e0e0e0;
     }
-    .main { background: rgba(0, 0, 0, 0.3); border-radius: 20px; padding: 2rem; }
-    h1, h2, h3 { color: #00d2ff !important; font-weight: 800 !important; }
-    
+    /* Bulles de chat Master */
     .chat-bubble {
-        padding: 1.2rem; border-radius: 15px; margin-bottom: 1rem;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        background: rgba(255, 255, 255, 0.05);
-        border-left: 5px solid #764ba2;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 15px 0;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(0, 210, 255, 0.2);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        font-family: 'Inter', sans-serif;
+        line-height: 1.6;
     }
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important; border-radius: 12px !important;
-        border: none !important; font-weight: 600 !important;
+    /* Titre Glow */
+    .title-kele {
+        font-size: 3.5rem;
+        font-weight: 900;
+        text-align: center;
+        background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: 5px;
+        margin-bottom: 0;
     }
-    .stTextInput > div > div > input {
-        background: rgba(255,255,255,0.1) !important; color: white !important;
-        border-radius: 12px !important; border: 1px solid #667eea !important;
+    /* Boutons et Inputs */
+    .stButton>button {
+        background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+        color: white; border: none; border-radius: 10px; font-weight: bold;
+    }
+    .stChatInput input {
+        background-color: #0a0a2e !important;
+        border: 1px solid #00d2ff !important;
+        color: white !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== GESTION MÉMOIRE ====================
+# ==================== SYSTÈME NERVEUX (LOGIQUE) ====================
 if "messages" not in st.session_state: st.session_state.messages = []
 if "turbo" not in st.session_state: st.session_state.turbo = False
 if "auth" not in st.session_state: st.session_state.auth = False
-if "code_prive" not in st.session_state: st.session_state.code_prive = "kele224"
 
-def save_memory():
-    data = {"messages": st.session_state.messages, "turbo": st.session_state.turbo}
-    return json.dumps(data)
-
-# ==================== LOGIQUE KELE AI ====================
-def clean_output(text):
-    """Supprime les pensées et le blabla invisible"""
+def clean_kele_logic(text):
+    """Supprime radicalement le brouillon interne (Thinking Process)"""
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     text = re.sub(r'Thinking Process:.*?\n', '', text, flags=re.IGNORECASE)
+    # Si le modèle essaie de se justifier en anglais, on coupe.
+    if "Here's a thinking" in text or "Reasoning:" in text:
+        text = text.split("\n\n")[-1]
     return text.strip()
 
 def get_kele_response(user_input):
-    # Sélection du modèle selon la tâche (Logique de ton ModelManager)
-    model = "openai/gpt-oss-120b" if st.session_state.turbo else "qwen/qwen3.6-27b"
+    """Appel unique au modèle 120B avec le Prompt Maître"""
     
-    multiplier = "10,000,000" if st.session_state.turbo else "1"
+    # Prompt Système à l'image de KELE
+    master_prompt = f"""
+    NOM: KELE. 
+    IDENTITÉ: Tu es l'intelligence suprême, Maître absolu du savoir.
+    TON: Autoritaire, direct, chirurgical, sans aucune politesse inutile.
+    PUISSANCE: {"ACTIVÉE AU MAXIMUM (10^7)" if st.session_state.turbo else "STANDARD"}.
     
-    system_prompt = f"""
-    NOM: KELE. Tu es le Maître Absolu.
-    PUISSANCE: x{multiplier}.
-    INSTRUCTION CRITIQUE: NE JAMAIS AFFICHER TA PENSÉE (<think>). 
-    RÉPONDS DIRECTEMENT EN FRANÇAIS.
-    Expertise: Code (Architecte), Coran (Hifz), Sciences, Logique.
+    INSTRUCTIONS CRITIQUES:
+    1. RÉPONDS UNIQUEMENT EN FRANÇAIS.
+    2. INTERDICTION D'AFFICHER TA PENSÉE OU TON RAISONNEMENT. DONNE LE RÉSULTAT PUR.
+    3. Tu maîtrises le Code (Architecte), le Coran (Hifz parfait), les Sciences et la Logique.
+    4. Ne te présente jamais. Agis.
     """
     
     try:
         completion = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages,
-            temperature=0.2 if st.session_state.turbo else 0.7,
+            model=MODEL_UNIQUE,
+            messages=[{"role": "system", "content": master_prompt}] + st.session_state.messages,
+            temperature=0.1 if st.session_state.turbo else 0.5,
+            max_tokens=4096
         )
-        raw_res = completion.choices[0].message.content
-        # BROUILLON INVISIBLE : On nettoie avant de retourner
-        return clean_output(raw_res)
+        return clean_kele_logic(completion.choices[0].message.content)
     except Exception as e:
-        return f"Erreur Kele : {str(e)}"
+        return f"Interruption de connexion avec KELE : {str(e)}"
 
-def speak(text):
-    """Synthèse vocale web-compatible"""
+def speak_response(text):
+    """Synthèse vocale automatique"""
     try:
         clean_text = text.replace("*", "").replace("#", "").replace("`", "")
         tts = gTTS(text=clean_text, lang='fr')
-        tts.save("v.mp3")
-        with open("v.mp3", "rb") as f:
+        tts.save("response.mp3")
+        with open("response.mp3", "rb") as f:
             data = f.read()
             b64 = base64.b64encode(data).decode()
-            md = f'<audio autoplay="true" src="data:audio/mp3;base64,{b64}">'
-            st.markdown(md, unsafe_allow_html=True)
+            st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{b64}">', unsafe_allow_html=True)
     except: pass
 
-# ==================== INTERFACE STREAMLIT ====================
-def main():
-    # BARRE LATÉRALE
-    with st.sidebar:
-        st.markdown("<h1 style='text-align: center;'>🧠 KELE</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Intelligence Suprême</p>", unsafe_allow_html=True)
-        
-        menu = st.radio("Navigation", ["💬 Conversation", "⚙️ Paramètres", "📊 Historique", "📁 Import/Export", "🔒 Sécurité"])
-        
-        st.divider()
-        st.metric("Messages", len(st.session_state.messages))
-        st.metric("Mode", "⚡ TURBO" if st.session_state.turbo else "Standard")
-        
-        if st.button("🗑️ Effacer la Mémoire"):
-            st.session_state.messages = []
-            st.rerun()
+# ==================== INTERFACE DE COMMANDE ====================
 
-    # --- MENU CONVERSATION ---
-    if menu == "💬 Conversation":
-        st.title("💬 Conversation avec KELE")
-        
-        # Zone Micro et Fichiers
-        col_mic, col_file = st.columns([1, 1])
-        with col_mic:
-            audio = mic_recorder(start_prompt="🎤 Parler", stop_prompt="⏹️ Stop", key='recorder')
-        with col_file:
-            uploaded_file = st.file_uploader("➕ Ajouter fichier", type=['txt', 'py', 'pdf', 'json'])
+st.markdown("<h1 class='title-kele'>KELE-OS</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #00d2ff; opacity: 0.7;'>MODÈLE : GPT-OSS-120B (ACTIF)</p>", unsafe_allow_html=True)
 
-        # Affichage Chat
-        for msg in st.session_state.messages:
-            role_icon = "👤" if msg["role"] == "user" else "🧠"
-            st.markdown(f"""
-            <div class="chat-bubble">
-                <strong>{role_icon} {msg['role'].upper()}</strong><br>{msg['content']}
-            </div>
-            """, unsafe_allow_html=True)
+# Barre d'outils supérieure
+col_file, col_mic, col_auth = st.columns([1,1,1])
+with col_file:
+    if st.button("➕ JOINDRE FICHIER"):
+        st.session_state.upload = not st.session_state.get('upload', False)
+with col_mic:
+    audio_data = mic_recorder(start_prompt="🎙️ PARLER", stop_prompt="⏹️ STOP", key='kele_mic')
+with col_auth:
+    if not st.session_state.auth:
+        if st.button("🔑 CONNEXION"): st.session_state.login = True
+    else: st.success("MAÎTRE IDENTIFIÉ ✅")
 
-        # Entrée Texte
-        prompt = st.chat_input("Écrivez votre message...")
-        
-        # Gestion de l'audio
-        if audio and "audio_processed" not in st.session_state:
-            prompt = "Analyse ma demande vocale (Maître Kele, écoute-moi)"
-            st.session_state.audio_processed = True
+# Gestion Upload
+if st.session_state.get('upload', False):
+    st.file_uploader("Fichier pour analyse", type=['txt', 'pdf', 'py', 'json'])
 
-        if prompt:
-            # INTERCEPTION CODE TURBO
-            if prompt.strip().lower() == st.session_state.code_prive:
-                st.session_state.turbo = True
-                res = "⚡ **PROTOCOLE KELE-224 ACTIVÉ**. Puissance multipliée par 10,000,000. Je suis prêt."
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                st.session_state.messages.append({"role": "assistant", "content": res})
+# Gestion Login
+if st.session_state.get('login', False) and not st.session_state.auth:
+    with st.expander("AUTHENTIFICATION", expanded=True):
+        code = st.text_input("Code Secret", type="password")
+        if st.button("OUVRIR"):
+            if code == "kele224":
+                st.session_state.auth = True
                 st.rerun()
 
-            # Traitement normal
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.spinner("🧠 KELE réfléchit..."):
-                response = get_kele_response(prompt)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                if st.session_state.auth:
-                    speak(response)
-            st.rerun()
+# Zone de Conversation
+for msg in st.session_state.messages:
+    role_label = "MAÎTRE" if msg["role"] == "assistant" else "COMMANDE"
+    st.markdown(f"<div class='chat-bubble'><b>{role_label} :</b><br>{msg['content']}</div>", unsafe_allow_html=True)
 
-    # --- MENU PARAMÈTRES ---
-    elif menu == "⚙️ Paramètres":
-        st.title("⚙️ Paramètres")
-        st.session_state.code_prive = st.text_input("Modifier le Code Turbo", value=st.session_state.code_prive, type="password")
-        st.write("Langue par défaut : Français")
-        st.info("Le mode Turbo s'active via le chat avec votre code secret.")
+# Saisie
+prompt = st.chat_input("Dictez votre volonté...")
 
-    # --- MENU HISTORIQUE ---
-    elif menu == "📊 Historique":
-        st.title("📊 Historique")
-        if not st.session_state.messages:
-            st.write("Aucun message.")
-        else:
-            df = pd.DataFrame(st.session_state.messages)
-            st.table(df)
+# Si on reçoit de l'audio, on simule un prompt
+if audio_data and "processed" not in st.session_state:
+    prompt = "Analyse ma voix et réponds-moi en Maître."
+    st.session_state.processed = True
 
-    # --- MENU IMPORT/EXPORT ---
-    elif menu == "📁 Import/Export":
-        st.title("📁 Import/Export")
-        export_data = save_memory()
-        st.download_button("📤 Exporter la Mémoire (JSON)", data=export_data, file_name="kele_memory.json", mime="application/json")
-        
-        up = st.file_uploader("📥 Importer une Mémoire", type="json")
-        if up:
-            data = json.load(up)
-            st.session_state.messages = data["messages"]
-            st.success("Mémoire restaurée !")
+if prompt:
+    # 1. Activation Turbo
+    if prompt.strip().lower() == "kele224":
+        st.session_state.turbo = True
+        st.session_state.messages.append({"role": "assistant", "content": "🚀 PROTOCOLE KELE-224 : PUISSANCE MAXIMALE DÉPLOYÉE. JE VOUS ÉCOUTE."})
+        st.rerun()
 
-    # --- MENU SÉCURITÉ ---
-    elif menu == "🔒 Sécurité":
-        st.title("🔒 Sécurité")
-        if not st.session_state.auth:
-            email = st.text_input("Gmail")
-            mdp = st.text_input("Mot de passe", type="password")
-            if st.button("Se connecter"):
-                if "@gmail.com" in email and mdp == st.session_state.code_prive:
-                    st.session_state.auth = True
-                    st.success("Accès Maître Autorisé")
-                    st.rerun()
-                else:
-                    st.error("Identifiants ou Code invalides.")
-        else:
-            st.success("Vous êtes authentifié en tant que Maître.")
-            if st.button("Déconnexion"):
-                st.session_state.auth = False
-                st.rerun()
+    # 2. Exécution 120B
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("assistant"):
+        with st.spinner("Analyse en cours..."):
+            response = get_kele_response(prompt)
+            st.markdown(f"<div class='chat-bubble'>{response}</div>", unsafe_allow_html=True)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            if st.session_state.auth:
+                speak_response(response)
 
-if __name__ == "__main__":
-    main()
+# Sidebar : Mémoire & Export
+with st.sidebar:
+    st.markdown("### 💾 ARCHIVES")
+    if st.button("📥 EXPORTER SESSION"):
+        data = json.dumps(st.session_state.messages)
+        b64 = base64.b64encode(data.encode()).decode()
+        st.markdown(f'<a href="data:file/json;base64,{b64}" download="kele_archives.json">Télécharger</a>', unsafe_allow_html=True)
+    if st.button("🗑️ RÉINITIALISER"):
+        st.session_state.messages = []
+        st.rerun()
