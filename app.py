@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import base64
+import re
 from groq import Groq
 from gtts import gTTS
 from streamlit_mic_recorder import mic_recorder
@@ -17,9 +18,6 @@ st.markdown("""
     .stApp { background: #010114; color: #e0e0e0; }
     .chat-bubble { padding: 15px; border-radius: 15px; margin: 10px 0; background: #0a0a2e; border: 1px solid #00d2ff; }
     .stButton>button { background: linear-gradient(90deg, #00d2ff, #3a7bd5); color: white; border-radius: 15px; border:none; }
-    .stChatInput { border-radius: 20px; }
-    /* Cache le "Thinking process" forcé par certains serveurs */
-    .thinking { display: none !important; } 
     </style>
     """, unsafe_allow_html=True)
 
@@ -29,17 +27,23 @@ if "turbo" not in st.session_state: st.session_state.turbo = False
 if "auth" not in st.session_state: st.session_state.auth = False
 if "code_prive" not in st.session_state: st.session_state.code_prive = "kele224"
 
-# --- LOGIQUE VOCALE & TEXTE ---
+# --- LOGIQUE DE NETTOYAGE RADICAL ---
+def clean_kele_output(text):
+    # Supprime tout ce qui est entre les balises <think> ou les blocs de raisonnement
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    text = re.sub(r'Thinking Process:.*?\n', '', text, flags=re.IGNORECASE)
+    # Supprime les introductions de raisonnement en anglais
+    if "Here's a thinking process" in text:
+        text = text.split("Final Output:")[-1] if "Final Output:" in text else text.split("\n\n")[-1]
+    return text.strip()
+
 def get_kele_response(user_input):
     model_to_use = "openai/gpt-oss-120b" if st.session_state.turbo else "qwen/qwen3.6-27b"
     
-    # SYSTEM PROMPT RADICAL : Supprime toute pensée
     system_instr = f"""
     NOM: KELE. Tu es le Maître Absolu.
-    INTERDICTION: Ne montre JAMAIS de "Thinking process", de "Reasoning" ou d'étapes de réflexion.
-    RÈGLE: Donne UNIQUEMENT la réponse finale.
-    LANGUE: Réponds dans la langue de l'utilisateur. Pas de mélange.
-    PUISSANCE: {"Mode Turbo 10^7 Actif" if st.session_state.turbo else "Mode Standard"}.
+    INTERDICTION STRICTE: Ne parle JAMAIS anglais. Ne montre JAMAIS de pensée.
+    RÈGLE: Réponds UNIQUEMENT en Français, de manière directe et chirurgicale.
     """
     
     try:
@@ -48,10 +52,8 @@ def get_kele_response(user_input):
             messages=[{"role": "system", "content": system_instr}] + st.session_state.messages,
             temperature=0.1,
         )
-        # Nettoyage manuel au cas où le modèle ignore l'instruction
-        res = chat_completion.choices[0].message.content
-        if "<think>" in res: res = res.split("</think>")[-1]
-        return res.strip()
+        raw_res = chat_completion.choices[0].message.content
+        return clean_kele_output(raw_res) # Nettoyage avant affichage
     except Exception as e:
         return f"Erreur Kele : {str(e)}"
 
@@ -68,65 +70,45 @@ def speak(text):
 # --- INTERFACE ---
 st.title("🌌 KELE-OS")
 
-# Barre d'outils supérieure
+# Barre d'outils
 t1, t2, t3 = st.columns([1,1,1])
 with t1:
-    if st.button("➕ Ajouter Fichier"):
-        st.session_state.show_upload = not st.session_state.get('show_upload', False)
+    if st.button("➕ Fichier"): st.session_state.show_up = not st.session_state.get('show_up', False)
 with t2:
-    st.write("🎙️ Micro :")
-    audio = mic_recorder(start_prompt="Click pour parler", stop_prompt="Stop", key='recorder')
+    audio = mic_recorder(start_prompt="🎙️ Parler", stop_prompt="⏹️ Stop", key='recorder')
 with t3:
     if not st.session_state.auth:
         if st.button("🔑 Connexion"): st.session_state.show_login = True
-    else: st.success("Connecté ✅")
+    else: st.success("Maître Connecté")
 
-# Affichage Upload Fichier
-if st.session_state.get('show_upload', False):
-    up = st.file_uploader("Joindre un document au Maître Kele", type=['txt', 'pdf', 'py', 'json'])
-    if up: st.info(f"Fichier {up.name} chargé en mémoire.")
+if st.session_state.get('show_up', False):
+    st.file_uploader("Joindre un document", type=['txt', 'pdf', 'py'])
 
-# Fenêtre de connexion
 if st.session_state.get('show_login', False) and not st.session_state.auth:
-    with st.expander("Accès Compte", expanded=True):
-        mdp = st.text_input("Code Secret", type="password")
-        if st.button("Ouvrir"):
-            if mdp == st.session_state.code_prive:
-                st.session_state.auth = True
-                st.rerun()
+    mdp = st.text_input("Code Secret", type="password")
+    if st.button("Ouvrir"):
+        if mdp == st.session_state.code_prive:
+            st.session_state.auth = True
+            st.rerun()
 
 # Zone de Chat
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(f"<div class='chat-bubble'>{m['content']}</div>", unsafe_allow_html=True)
 
-# GESTION DES ENTRÉES (MICRO OU TEXTE)
-user_input = None
-
-if audio: # Si on a utilisé le micro
-    # Note: Dans cette version simplifiée, on traite l'audio comme une commande de réveil
-    # Car Whisper nécessite une étape de transcription API.
-    user_input = "L'utilisateur a envoyé un message vocal (Fonction de transcription Whisper en cours...)"
-    # Optionnel: Pour l'instant, on simule l'écoute
-    user_input = "Analyse ma voix et réponds-moi" 
-
+# Entrée
 prompt = st.chat_input("Écrivez au Maître Kele...")
-if prompt: user_input = prompt
-
-if user_input:
-    # 1. Verification Turbo kele224
-    if user_input.strip().lower() == "kele224":
+if prompt:
+    if prompt.strip().lower() == st.session_state.code_prive:
         st.session_state.turbo = True
-        st.session_state.messages.append({"role": "assistant", "content": "⚡ MODE TURBO ACTIVÉ. PUISSANCE X 10,000,000. Je vous écoute."})
+        st.session_state.messages.append({"role": "assistant", "content": "🚀 MODE TURBO ACTIVÉ."})
         st.rerun()
 
-    # 2. Ajout message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"): st.markdown(user_input)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"): st.markdown(prompt)
 
-    # 3. Réponse
     with st.chat_message("assistant"):
-        res = get_kele_response(user_input)
+        res = get_kele_response(prompt)
         st.markdown(f"<div class='chat-bubble'>{res}</div>", unsafe_allow_html=True)
         st.session_state.messages.append({"role": "assistant", "content": res})
         if st.session_state.auth:
