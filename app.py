@@ -6,18 +6,18 @@ from groq import Groq
 from gtts import gTTS
 
 # ------------------------------------------------------------------------------
-# 1. INITIALISATION DU CLIENT GROQ (Via Streamlit Secrets)
+# 1. INITIALISATION DU CLIENT GROQ (Utilise la clé des Secrets ou la clé directe)
 # ------------------------------------------------------------------------------
-api_key = os.environ.get("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", "")
+api_key = os.environ.get("GROQ_API_KEY", "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")
 
 if not api_key:
-    st.error("🔑 Clé API introuvable ! Veuillez ajouter GROQ_API_KEY dans les Secrets de Streamlit.")
+    st.error("🔑 Clé API introuvable ! Veuillez vérifier la configuration.")
     st.stop()
 
 client = Groq(api_key=api_key)
 
 # ------------------------------------------------------------------------------
-# 2. CONFIGURATION DE L'INTERFACE & STYLE CSS
+# 2. CONFIGURATION DE L'INTERFACE & STYLE CSS (Dégradé Mobile)
 # ------------------------------------------------------------------------------
 st.set_page_config(
     page_title="KELE OS - Intelligence Universelle",
@@ -61,12 +61,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# 3. LISTE DES MODÈLES OFFICIELS GROQ
+# 3. LISTE STRICTE DES MODÈLES DE TON COMPTE GROQ
 # ------------------------------------------------------------------------------
 MODELS_STACK = {
-    "orchestrator": "llama-3.3-70b-versatile",
-    "fast_chat": "llama-3.1-8b-instant",
-    "whisper": "whisper-large-v3-turbo"
+    "orchestrator": "openai/gpt-oss-120b",
+    "fast_chat": "openai/gpt-oss-20b",
+    "whisper": "whisper-large-v3-turbo",
+    "whisper_v3": "whisper-large-v3",
+    "guard_prompt_22m": "meta-llama/llama-prompt-guard-2-22m",
+    "guard_prompt_86m": "meta-llama/llama-prompt-guard-2-86m",
+    "guard_safety": "openai/gpt-oss-safeguard-20b",
+    "orpheus_arabic": "canopylabs/orpheus-arabic-saudi",
+    "orpheus_english": "canopylabs/orpheus-v1-english",
+    "qwen": "qwen/qwen3.6-27b",
+    "compound": "groq/compound",
+    "compound_mini": "groq/compound-mini",
+    "allam": "allam-2-7b"
 }
 
 # ------------------------------------------------------------------------------
@@ -192,6 +202,7 @@ def process_query(prompt_text):
         st.session_state.turbo_mode = True
         return "MODE TURBO ACTIVÉ. KELE EST PRÊT. Puissance maximale atteinte."
 
+    # Utilisation stricte des modèles de ton compte
     selected_model = MODELS_STACK["orchestrator"] if st.session_state.turbo_mode else MODELS_STACK["fast_chat"]
 
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -210,18 +221,18 @@ def process_query(prompt_text):
     except Exception as e:
         return f"Erreur de communication : {str(e)}"
 
-# Affichage de l'historique des conversations
+# Affichage des messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Entrée vocale
+# Saisie vocale
 audio_val = st.audio_input("🎤 Enregistrer un message vocal")
 
-# Entrée texte
+# Saisie texte
 user_input = st.chat_input("Posez une question ou entrez le code...")
 
-# Traitement vocal si un enregistrement est soumis
+# Traitement vocal avec whisper-large-v3-turbo de ton compte
 if audio_val:
     try:
         transcription = client.audio.transcriptions.create(
@@ -232,7 +243,6 @@ if audio_val:
     except Exception as e:
         st.error(f"Erreur de transcription audio : {e}")
 
-# Exécution de la réponse
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
