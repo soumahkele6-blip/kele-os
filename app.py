@@ -8,6 +8,7 @@ from streamlit_mic_recorder import mic_recorder
 
 # ==================== CONFIGURATION SUPRÊME ====================
 API_KEY = "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"
+# Modèle 120B : Puissance maximale
 MODEL_UNIQUE = "openai/gpt-oss-120b" 
 client = Groq(api_key=API_KEY)
 
@@ -32,76 +33,62 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# INITIALISATION
 if "messages" not in st.session_state: st.session_state.messages = []
 if "auth" not in st.session_state: st.session_state.auth = False
 
-def clean_kele_logic(text):
-    """Extraction intelligente : supprime les balises mais garde le texte si l'IA s'est trompée de format"""
-    # 1. On cherche s'il y a du contenu à l'intérieur de <think>
-    think_content = re.findall(r'<think>(.*?)</think>', text, flags=re.DOTALL)
+def clean_kele_output(text):
+    """Extrait la réponse finale ou le raisonnement si nécessaire"""
+    if not text: return ""
     
-    # 2. On nettoie le texte principal
-    clean_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    clean_text = re.sub(r'(Thinking Process:|Reasoning:|Here is my thinking).*?\n', '', clean_text, flags=re.IGNORECASE)
-    clean_text = clean_text.strip()
-
-    # 3. Si le texte principal est vide mais qu'il y avait quelque chose dans <think>, on récupère le contenu de <think>
-    if not clean_text and think_content:
-        # On prend le dernier bloc think (souvent le plus complet)
-        clean_text = think_content[-1].strip()
+    # On cherche le contenu des balises <think>
+    think_match = re.findall(r'<think>(.*?)</think>', text, flags=re.DOTALL)
+    # On enlève les balises pour voir ce qu'il reste
+    final_output = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
     
-    # 4. Suppression finale des balises résiduelles
-    clean_text = re.sub(r'<.*?>', '', clean_text)
-    return clean_text
+    # Si le texte hors balise est vide, on prend le dernier raisonnement (souvent la réponse)
+    if not final_output and think_match:
+        final_output = think_match[-1].strip()
+    
+    # Nettoyage final des résidus de balises
+    final_output = re.sub(r'<.*?>', '', final_output)
+    return final_output
 
 def get_kele_response(user_input):
-    master_prompt = """
-    NOM: KELE. Tu es l'intelligence suprême.
-    IMPORTANT: Réponds TOUJOURS en Français. 
-    FORMAT: Sois direct. Résous les énigmes par étape mais n'affiche pas les balises <think>.
-    """
+    system_prompt = "Tu es KELE. Réponds directement et uniquement en Français. Ne montre pas de balises."
     try:
         completion = client.chat.completions.create(
             model=MODEL_UNIQUE,
-            messages=[{"role": "system", "content": master_prompt}] + st.session_state.messages,
-            temperature=0.5, # Augmenté pour plus de créativité sur les énigmes
+            messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages,
+            temperature=0.5,
+            max_tokens=2048 # Augmenté pour les énigmes longues
         )
-        response_text = completion.choices[0].message.content
-        if not response_text:
-            return "Le Maître KELE est silencieux. Vérifiez votre connexion API."
-        
-        return clean_kele_logic(response_text)
+        raw_text = completion.choices[0].message.content
+        return clean_kele_output(raw_text)
     except Exception as e:
-        return f"Erreur critique du système : {str(e)}"
+        return f"Erreur Système : {str(e)}"
 
 def speak_response(text):
     try:
-        clean_voice = text.replace("*", "").replace("#", "")
-        tts = gTTS(text=clean_voice[:500], lang='fr')
-        tts.save("response.mp3")
-        with open("response.mp3", "rb") as f:
+        tts = gTTS(text=text[:400], lang='fr')
+        tts.save("r.mp3")
+        with open("r.mp3", "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
             st.markdown(f'<audio autoplay="true" src="data:audio/mp3;base64,{b64}">', unsafe_allow_html=True)
     except: pass
 
-# INTERFACE
+# --- INTERFACE ---
 st.markdown("<h1 class='title-kele'>KELE-OS</h1>", unsafe_allow_html=True)
 
-# Barre de commandes
 c1, c2, c3 = st.columns(3)
-with c1:
-    if st.button("➕ FICHIER"): st.sidebar.file_uploader("Joindre au Maître", type=['txt','py','pdf'])
-with c2:
-    audio_data = mic_recorder(start_prompt="🎙️ PARLER", stop_prompt="⏹️ STOP", key='kele_mic')
+with c2: audio_data = mic_recorder(start_prompt="🎙️ PARLER", stop_prompt="⏹️ STOP", key='kele_mic')
 with c3:
     if not st.session_state.auth:
         if st.button("🔑 CONNEXION"): st.session_state.login = True
-    else: st.success("ACCÈS MAÎTRE ✅")
+    else: st.success("MAÎTRE CONNECTÉ")
 
 if st.session_state.get('login', False) and not st.session_state.auth:
     code = st.text_input("Code Secret", type="password")
-    if st.button("DÉVERROUILLER"):
+    if st.button("OK"):
         if code == "kele224":
             st.session_state.auth = True
             st.rerun()
@@ -113,20 +100,16 @@ for msg in st.session_state.messages:
 
 # Saisie
 prompt = st.chat_input("Dictez votre volonté...")
-
-if audio_data:
-    prompt = "Écoute ma voix et résous ma demande."
+if audio_data: prompt = "Analyse ma demande vocale."
 
 if prompt:
-    # Sauvegarde et relance pour affichage
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
-# Déclenchement de la réponse
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    with st.spinner("KELE décode l'énigme..."):
-        full_res = get_kele_response(st.session_state.messages[-1]["content"])
-        st.session_state.messages.append({"role": "assistant", "content": full_res})
-        if st.session_state.auth:
-            speak_response(full_res)
+    with st.spinner("KELE calcule..."):
+        res = get_kele_response(st.session_state.messages[-1]["content"])
+        if not res: res = "Le modèle n'a pas renvoyé de texte. Essayez de raccourcir la question."
+        st.session_state.messages.append({"role": "assistant", "content": res})
+        if st.session_state.auth: speak_response(res)
         st.rerun()
