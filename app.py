@@ -5,177 +5,125 @@ import base64
 from groq import Groq
 from gtts import gTTS
 
-# --- CONFIGURATION DE LA CLÉ API (HARDCODED COMME DEMANDÉ) ---
+# --- CONFIGURATION API ---
 GROQ_API_KEY = "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"
 
-# --- CONFIGURATION INITIALE ---
-st.set_page_config(page_title="KELE - L'Intelligence Maître", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="KELE-OS", layout="wide")
 
-# --- STYLE CSS PERSONNALISÉ (DESIGN DÉGRADÉ MAGNIFIQUE & MOBILE FRIENDLY) ---
+# --- DESIGN PREMIUM ---
 st.markdown("""
     <style>
-    .stApp {
-        background: linear-gradient(135deg, #020111 0%, #050531 35%, #0c0c52 100%);
-        color: white;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 12px;
-        background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
-        color: white;
-        border: none;
-        padding: 10px;
-        font-weight: bold;
-        box-shadow: 0px 4px 15px rgba(0, 210, 255, 0.3);
-    }
-    .stTextInput>div>div>input {
-        background-color: rgba(255, 255, 255, 0.05);
-        color: white;
-        border-radius: 10px;
-        border: 1px solid rgba(0, 210, 255, 0.2);
-    }
-    .chat-bubble {
-        padding: 18px;
-        border-radius: 15px;
-        margin-bottom: 15px;
-        background: rgba(255, 255, 255, 0.07);
-        border-left: 5px solid #00d2ff;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .kele-header {
-        text-align: center;
-        background: -webkit-linear-gradient(#00d2ff, #3a7bd5);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 3em;
-        font-weight: 900;
-    }
+    .stApp { background: linear-gradient(135deg, #020111 0%, #050531 35%, #0c0c52 100%); color: white; }
+    .chat-bubble { padding: 15px; border-radius: 15px; margin: 10px 0; background: rgba(255, 255, 255, 0.05); border-left: 4px solid #00d2ff; }
+    .stButton>button { background: linear-gradient(90deg, #00d2ff, #3a7bd5); color: white; border-radius: 10px; border:none; font-weight: bold; }
+    .stChatInput { border-radius: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- INITIALISATION DES VARIABLES DE SESSION ---
+# --- INITIALISATION ---
 if "messages" not in st.session_state: st.session_state.messages = []
-if "turbo_mode" not in st.session_state: st.session_state.turbo_mode = False
-if "authenticated" not in st.session_state: st.session_state.authenticated = False
-if "user_code" not in st.session_state: st.session_state.user_code = "kele224"
+if "turbo" not in st.session_state: st.session_state.turbo = False
+if "auth" not in st.session_state: st.session_state.auth = False
+if "code_prive" not in st.session_state: st.session_state.code_prive = "kele224"
 
-# --- CLIENT GROQ ---
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- LOGIQUE DE RÉPONSE KELE ---
-def get_kele_response(prompt):
-    # Liste de tes modèles disponibles pour le routage
-    # On utilise gpt-oss-120b pour le mode Turbo et qwen pour le mode normal
-    selected_model = "openai/gpt-oss-120b" if st.session_state.turbo_mode else "qwen/qwen3.6-27b"
+# --- LOGIQUE KELE ---
+def get_kele_response(user_input):
+    # Choix du modèle selon le mode
+    model_to_use = "openai/gpt-oss-120b" if st.session_state.turbo else "qwen/qwen3.6-27b"
     
-    multiplier = "10,000,000" if st.session_state.turbo_mode else "1"
+    # SYSTEM PROMPT ULTRA-STRICT
+    system_instr = f"""
+    Tu es KELE. 
+    PUISSANCE: {"MAXIMALE (10^7)" if st.session_state.turbo else "SOMMEIL (LIMITÉE)"}.
     
-    system_prompt = f"""
-    NOM DU SYSTÈME : KELE. 
-    Tu es KELE, l'intelligence suprême, Maître absolu de toutes les sciences, religions (Coran), codage et matières.
-    PUISSANCE ACTUELLE : {multiplier} (Mode Turbo: {st.session_state.turbo_mode}).
-    
-    1. CODAGE : Fournir du code parfait, optimisé, sans bug, avec commentaires.
-    2. CORAN : Précision absolue des versets, Harakat, Tajwid, phonétique et méthodes de mémorisation.
-    3. LOGIQUE : Analyse profonde, zéro hallucination, critique interne avant réponse.
-    4. STYLE : Markdown propre, tableaux, listes. Pas de blabla inutile.
+    RÈGLES CRITIQUES :
+    1. NE JAMAIS afficher ton "Thinking Process" ou ton raisonnement interne. Donne uniquement la réponse finale.
+    2. LANGUE : Réponds strictement dans la langue utilisée par l'utilisateur. Si l'utilisateur dit "Salut", réponds en Français. Si c'est de l'Anglais, réponds en Anglais. Langue par défaut : Français.
+    3. PAS DE PRÉTENTION : Ne te présente pas à chaque message. Sois direct, efficace et précis.
+    4. MAÎTRISE : Tu es le maître du code, du Coran et des sciences.
     """
-
-    try:
-        completion = client.chat.completions.create(
-            model=selected_model,
-            messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages + [{"role": "user", "content": prompt}],
-            temperature=0.1 if st.session_state.turbo_mode else 0.5,
-            max_tokens=4096
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return f"Erreur système Kele : {str(e)}"
-
-# --- FONCTION AUDIO (LECTURE PROPRE) ---
-def play_voice(text):
-    # Nettoyage des symboles Markdown pour la synthèse vocale
-    clean_text = text.replace("*", "").replace("#", "").replace("`", "").replace("-", " ")
-    tts = gTTS(text=clean_text, lang='fr')
-    tts.save("voice.mp3")
-    audio_file = open("voice.mp3", "rb")
-    audio_bytes = audio_file.read()
-    st.audio(audio_bytes, format='audio/mp3')
-
-# --- INTERFACE PRINCIPALE ---
-
-st.markdown("<h1 class='kele-header'>KELE-OS</h1>", unsafe_allow_html=True)
-
-# Barre Latérale (Sidebar) pour le téléphone
-with st.sidebar:
-    st.title("⚙️ PANNEAU DE CONTRÔLE")
     
-    if not st.session_state.authenticated:
-        st.subheader("Authentification")
-        login_mail = st.text_input("Gmail de vérification")
-        login_pwd = st.text_input("Code d'accès", type="password")
-        if st.button("ACTIVER KELE"):
-            if login_pwd == st.session_state.user_code:
-                st.session_state.authenticated = True
-                st.success("Accès Maître Autorisé")
+    try:
+        chat_completion = client.chat.completions.create(
+            model=model_to_use,
+            messages=[{"role": "system", "content": system_instr}] + st.session_state.messages,
+            temperature=0.1, # Pour éviter les divagations
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        return f"Erreur : {str(e)}"
+
+def speak(text):
+    clean_text = text.replace("*", "").replace("#", "").replace("`", "")
+    tts = gTTS(text=clean_text, lang='fr')
+    tts.save("v.mp3")
+    audio_file = open("v.mp3", "rb")
+    st.audio(audio_file.read(), format='audio/mp3', autoplay=True)
+
+# --- INTERFACE ---
+
+st.title("🌌 KELE-OS")
+
+# Barre de statut en haut
+col1, col2 = st.columns([2, 1])
+with col1:
+    status = "🔥 TURBO ACTIF" if st.session_state.turbo else "💤 MODE SOMMEIL"
+    st.info(f"Statut : {status}")
+with col2:
+    if not st.session_state.auth:
+        if st.button("🔑 CONNEXION COMPTE"):
+            st.session_state.show_login = True
+    else:
+        st.success("✅ CONNECTÉ")
+
+# Fenêtre de connexion (si cliqué)
+if "show_login" in st.session_state and not st.session_state.auth:
+    with st.expander("FORMULAIRE DE CONNEXION", expanded=True):
+        email = st.text_input("Gmail")
+        mdp = st.text_input("Mot de passe", type="password")
+        if st.button("VALIDER"):
+            if mdp == st.session_state.code_prive:
+                st.session_state.auth = True
                 st.rerun()
             else:
-                st.error("Code incorrect")
-    else:
-        st.success("🟢 KELE EST ÉVEILLÉ")
-        st.session_state.user_code = st.text_input("Modifier code Turbo", value=st.session_state.user_code)
-        
-    st.divider()
-    
-    # Import / Export
-    st.subheader("💾 MÉMOIRE & FICHIERS")
-    uploaded_file = st.file_uploader("Importer (txt, py, json)", type=['txt', 'py', 'json'])
-    
-    if st.button("Exporter Session (JSON)"):
-        data = json.dumps(st.session_state.messages)
-        b64 = base64.b64encode(data.encode()).decode()
-        st.markdown(f'<a href="data:file/json;base64,{b64}" download="kele_memory.json">📥 Télécharger la mémoire</a>', unsafe_allow_html=True)
+                st.error("Code invalide.")
 
-    if st.button("🗑️ Réinitialiser Kele"):
-        st.session_state.messages = []
-        st.session_state.turbo_mode = False
-        st.rerun()
-
-# Affichage des messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(f"<div class='chat-bubble'>{message['content']}</div>", unsafe_allow_html=True)
+# Affichage du chat
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(f"<div class='chat-bubble'>{m['content']}</div>", unsafe_allow_html=True)
 
 # Entrée utilisateur
-user_input = st.chat_input("Posez votre question à Kele...")
-
-if user_input:
-    # Détection du Code Turbo
-    if user_input.strip() == st.session_state.user_code:
-        st.session_state.turbo_mode = True
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        turbo_msg = "⚡ **MODE TURBO ACTIVÉ**. PUISSANCE X 10,000,000. Je suis Kele, le Maître de tout. Quelle est votre première commande ?"
-        st.session_state.messages.append({"role": "assistant", "content": turbo_msg})
+if prompt := st.chat_input("Parlez à Kele..."):
+    
+    # INTERCEPTION DU CODE TURBO
+    if prompt.strip() == st.session_state.code_prive:
+        st.session_state.turbo = True
+        st.session_state.messages.append({"role": "assistant", "content": "🚀 PROTOCOLE KELE-224 ACTIVÉ. PUISSANCE MAXIMALE DÉPLOYÉE."})
         st.rerun()
 
-    # Traitement normal (Efficacité dépend de l'auth)
-    if not st.session_state.authenticated:
-        st.warning("⚠️ Attention : Kele fonctionne en mode 'Sommeil'. Connectez-vous pour activer son plein potentiel.")
+    # Ajout du message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"): st.markdown(prompt)
 
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
+    # Réponse Kele
     with st.chat_message("assistant"):
-        with st.spinner("Kele réfléchit..."):
-            response = get_kele_response(user_input)
-            st.markdown(f"<div class='chat-bubble'>{response}</div>", unsafe_allow_html=True)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Lecture vocale si l'utilisateur n'est pas en mode silencieux
-            if st.session_state.authenticated:
-                play_voice(response)
+        response = get_kele_response(prompt)
+        st.markdown(f"<div class='chat-bubble'>{response}</div>", unsafe_allow_html=True)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Audio automatique si connecté
+        if st.session_state.auth:
+            speak(response)
 
-# Pied de page dynamique
-if st.session_state.turbo_mode:
-    st.markdown("<p style='text-align: center; color: #00d2ff;'>🔥 MODE TURBO : MAXIMUM PERFORMANCE 🔥</p>", unsafe_allow_html=True)
+# Sidebar : Fonctions Import/Export
+with st.sidebar:
+    st.header("MÉMOIRE")
+    if st.button("📥 EXPORTER TRAVAIL"):
+        b64 = base64.b64encode(json.dumps(st.session_state.messages).encode()).decode()
+        st.markdown(f'<a href="data:file/json;base64,{b64}" download="kele.json">Télécharger</a>', unsafe_allow_html=True)
+    if st.button("🗑️ NOUVELLE CONVERSATION"):
+        st.session_state.messages = []
+        st.rerun()
