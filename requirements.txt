@@ -1,3 +1,5 @@
-streamlit>=1.30.0
-groq>=0.4.0
-gTTS>=2.5.0
+streamlit
+groq
+gTTS
+streamlit-mic-recorder
+pandas
